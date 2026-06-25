@@ -2,6 +2,8 @@
 
 Приложение для учёта джамаатов в мечетях Кыргызстана.
 
+> Деплой: frontend (GitHub Pages) + backend (Render.com) + PostgreSQL (Neon)
+
 ## Стек
 
 - **Клиент:** React 18, React Router 6, Vite 5
