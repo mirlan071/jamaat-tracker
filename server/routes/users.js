@@ -5,9 +5,9 @@ const { authenticate, requireAdmin, requireSuperAdmin } = require('../middleware
 
 const router = express.Router();
 
-router.get('/', authenticate, requireAdmin, (req, res) => {
+router.get('/', authenticate, requireAdmin, async (req, res) => {
   try {
-    const users = db.users.all().map(u => ({
+    const users = (await db.users.all()).map(u => ({
       id: u.id, phone: u.phone, full_name: u.full_name, role: u.role, created_at: u.created_at,
     }));
     res.json(users);
@@ -16,37 +16,37 @@ router.get('/', authenticate, requireAdmin, (req, res) => {
   }
 });
 
-router.put('/:id/role', authenticate, requireSuperAdmin, (req, res) => {
+router.put('/:id/role', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const { role } = req.body;
     if (!['user', 'admin', 'superadmin'].includes(role)) {
       return res.status(400).json({ error: 'Неверная роль' });
     }
-    const user = db.users.get(parseInt(req.params.id));
+    const user = await db.users.get(parseInt(req.params.id));
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
-    db.users.update(user.id, { role });
+    await db.users.update(user.id, { role });
     res.json({ message: 'Роль обновлена' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.delete('/:id', authenticate, requireSuperAdmin, (req, res) => {
+router.delete('/:id', authenticate, requireSuperAdmin, async (req, res) => {
   try {
-    const user = db.users.get(parseInt(req.params.id));
+    const user = await db.users.get(parseInt(req.params.id));
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
     if (user.role === 'superadmin') {
       return res.status(400).json({ error: 'Нельзя удалить главного админа' });
     }
-    db.users.delete(user.id);
+    await db.users.delete(user.id);
     res.json({ message: 'Пользователь удалён' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/', authenticate, requireSuperAdmin, (req, res) => {
+router.post('/', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const { phone, password, full_name, role } = req.body;
     if (!phone || !password || !full_name) {
@@ -58,12 +58,12 @@ router.post('/', authenticate, requireSuperAdmin, (req, res) => {
     if (password.length < 6) {
       return res.status(400).json({ error: 'Пароль должен быть не менее 6 символов' });
     }
-    const existing = db.users.getByPhone(phone);
+    const existing = await db.users.getByPhone(phone);
     if (existing) {
       return res.status(400).json({ error: 'Пользователь с таким телефоном уже существует' });
     }
     const hash = bcrypt.hashSync(password, 10);
-    const user = db.users.create({ phone, password: hash, full_name, role: role || 'user' });
+    const user = await db.users.create({ phone, password: hash, full_name, role: role || 'user' });
     res.json({ id: user.id, phone: user.phone, full_name: user.full_name, role: user.role });
   } catch (err) {
     res.status(500).json({ error: err.message });

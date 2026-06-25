@@ -1,160 +1,243 @@
-const fs = require('fs');
-const path = require('path');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
-const DB_PATH = path.join(__dirname, 'jamaat.json');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
+});
 
-let data = { users: [], mosques: [], jamaats: [], jamaat_members: [] };
+async function query(text, params) {
+  const res = await pool.query(text, params);
+  return res;
+}
 
-function load() {
-  if (fs.existsSync(DB_PATH)) {
-    data = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-  } else {
-    save();
+async function initDB() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      phone VARCHAR(20) UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      role VARCHAR(20) DEFAULT 'user',
+      mosque_id INTEGER,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS mosques (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      address TEXT NOT NULL,
+      region TEXT NOT NULL,
+      city TEXT NOT NULL,
+      phone TEXT,
+      can_host_jamaat BOOLEAN DEFAULT false,
+      latitude REAL,
+      longitude REAL,
+      admin_id INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS jamaats (
+      id SERIAL PRIMARY KEY,
+      mosque_id INTEGER REFERENCES mosques(id) ON DELETE CASCADE,
+      leader_name TEXT NOT NULL,
+      leader_phone TEXT NOT NULL,
+      member_count INTEGER DEFAULT 0,
+      duration_type VARCHAR(20) NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE,
+      notes TEXT,
+      status VARCHAR(20) DEFAULT 'active',
+      created_by INTEGER REFERENCES users(id),
+      attached_at TIMESTAMP DEFAULT NOW(),
+      detached_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS jamaat_members (
+      id SERIAL PRIMARY KEY,
+      jamaat_id INTEGER REFERENCES jamaats(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      phone TEXT
+    );
+  `);
+
+  const adminExists = await query("SELECT id FROM users WHERE phone = '996700000000'");
+  if (adminExists.rows.length === 0) {
+    const hash = bcrypt.hashSync('admin123', 10);
+    await query(
+      "INSERT INTO users (phone, password, full_name, role) VALUES ($1, $2, $3, $4)",
+      ['996700000000', hash, 'Главный Админ', 'superadmin']
+    );
   }
 }
 
-function save() {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
-
-function nextId(table) {
-  const items = data[table];
-  return items.length > 0 ? Math.max(...items.map(i => i.id)) + 1 : 1;
-}
-
 const db = {
-  load,
-  save,
-  nextId,
+  pool,
+  query,
+  initDB,
 
   users: {
-    get(id) { return data.users.find(u => u.id === id); },
-    getByPhone(phone) { return data.users.find(u => u.phone === phone); },
-    all() { return data.users; },
-    create(user) {
-      user.id = nextId('users');
-      user.created_at = new Date().toISOString();
-      data.users.push(user);
-      save();
-      return user;
+    async get(id) {
+      const res = await query('SELECT * FROM users WHERE id = $1', [id]);
+      return res.rows[0] || null;
     },
-    update(id, fields) {
-      const user = data.users.find(u => u.id === id);
-      if (user) { Object.assign(user, fields); save(); }
-      return user;
+    async getByPhone(phone) {
+      const res = await query('SELECT * FROM users WHERE phone = $1', [phone]);
+      return res.rows[0] || null;
     },
-    delete(id) {
-      data.users = data.users.filter(u => u.id !== id);
-      save();
-    }
+    async all() {
+      const res = await query('SELECT * FROM users ORDER BY id');
+      return res.rows;
+    },
+    async create(user) {
+      const res = await query(
+        'INSERT INTO users (phone, password, full_name, role, mosque_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [user.phone, user.password, user.full_name, user.role || 'user', user.mosque_id || null]
+      );
+      return res.rows[0];
+    },
+    async update(id, fields) {
+      const keys = Object.keys(fields);
+      if (keys.length === 0) return null;
+      const setClauses = keys.map((k, i) => `${k} = $${i + 2}`);
+      const values = [id, ...keys.map(k => fields[k])];
+      const res = await query(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`, values);
+      return res.rows[0] || null;
+    },
+    async delete(id) {
+      await query('DELETE FROM users WHERE id = $1', [id]);
+    },
   },
 
   mosques: {
-    get(id) { return data.mosques.find(m => m.id === parseInt(id)); },
-    all() { return data.mosques; },
-    create(mosque) {
-      mosque.id = nextId('mosques');
-      mosque.created_at = new Date().toISOString();
-      data.mosques.push(mosque);
-      save();
-      return mosque;
+    async get(id) {
+      const res = await query('SELECT * FROM mosques WHERE id = $1', [parseInt(id)]);
+      return res.rows[0] || null;
     },
-    update(id, fields) {
-      const m = data.mosques.find(m => m.id === parseInt(id));
-      if (m) { Object.assign(m, fields); save(); }
-      return m;
+    async all() {
+      const res = await query('SELECT * FROM mosques ORDER BY id');
+      return res.rows;
     },
-    delete(id) {
-      data.mosques = data.mosques.filter(m => m.id !== parseInt(id));
-      data.jamaats = data.jamaats.filter(j => j.mosque_id !== parseInt(id));
-      save();
+    async create(mosque) {
+      const res = await query(
+        `INSERT INTO mosques (name, address, region, city, phone, can_host_jamaat, admin_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [mosque.name, mosque.address, mosque.region, mosque.city, mosque.phone || null, mosque.can_host_jamaat || false, mosque.admin_id || null]
+      );
+      return res.rows[0];
     },
-    search(query) {
-      let results = data.mosques;
-      if (query.region) results = results.filter(m => m.region === query.region);
-      if (query.search) {
-        const s = query.search.toLowerCase();
-        results = results.filter(m => m.name.toLowerCase().includes(s) || m.city.toLowerCase().includes(s));
+    async update(id, fields) {
+      const keys = Object.keys(fields);
+      if (keys.length === 0) return null;
+      const setClauses = keys.map((k, i) => `${k} = $${i + 2}`);
+      const values = [parseInt(id), ...keys.map(k => fields[k])];
+      const res = await query(`UPDATE mosques SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`, values);
+      return res.rows[0] || null;
+    },
+    async delete(id) {
+      await query('DELETE FROM mosques WHERE id = $1', [parseInt(id)]);
+    },
+    async search(query_params) {
+      let sql = `
+        SELECT m.*,
+          u.full_name as admin_name,
+          (SELECT COUNT(*) FROM jamaats j WHERE j.mosque_id = m.id AND j.status = 'active') as active_jamaats
+        FROM mosques m
+        LEFT JOIN users u ON m.admin_id = u.id
+      `;
+      const conditions = [];
+      const values = [];
+      let idx = 1;
+
+      if (query_params.region) {
+        conditions.push(`m.region = $${idx++}`);
+        values.push(query_params.region);
       }
-      return results.map(m => {
-        const admin = m.admin_id ? data.users.find(u => u.id === m.admin_id) : null;
-        return {
-          ...m,
-          admin_name: admin?.full_name || null,
-          active_jamaats: data.jamaats.filter(j => j.mosque_id === m.id && j.status === 'active').length
-        };
-      });
+      if (query_params.search) {
+        conditions.push(`(LOWER(m.name) LIKE $${idx} OR LOWER(m.city) LIKE $${idx})`);
+        values.push(`%${query_params.search.toLowerCase()}%`);
+        idx++;
+      }
+
+      if (conditions.length > 0) {
+        sql += ` WHERE ${conditions.join(' AND ')}`;
+      }
+      sql += ' ORDER BY m.id';
+
+      const res = await query(sql, values);
+      return res.rows;
     },
-    regions() {
-      return [...new Set(data.mosques.map(m => m.region))].sort();
-    }
+    async regions() {
+      const res = await query('SELECT DISTINCT region FROM mosques ORDER BY region');
+      return res.rows.map(r => r.region);
+    },
   },
 
   jamaats: {
-    get(id) { return data.jamaats.find(j => j.id === parseInt(id)); },
-    all(query = {}) {
-      let results = data.jamaats;
-      if (query.mosque_id) results = results.filter(j => j.mosque_id === parseInt(query.mosque_id));
-      if (query.status) results = results.filter(j => j.status === query.status);
-      if (query.leader_name) {
-        const s = query.leader_name.toLowerCase();
-        results = results.filter(j => j.leader_name.toLowerCase().includes(s));
+    async get(id) {
+      const res = await query('SELECT * FROM jamaats WHERE id = $1', [parseInt(id)]);
+      return res.rows[0] || null;
+    },
+    async all(q = {}) {
+      let sql = `
+        SELECT j.*,
+          m.name as mosque_name, m.city, m.region, m.address as mosque_address, m.phone as mosque_phone,
+          u.full_name as created_by_name
+        FROM jamaats j
+        LEFT JOIN mosques m ON j.mosque_id = m.id
+        LEFT JOIN users u ON j.created_by = u.id
+      `;
+      const conditions = [];
+      const values = [];
+      let idx = 1;
+
+      if (q.mosque_id) { conditions.push(`j.mosque_id = $${idx++}`); values.push(parseInt(q.mosque_id)); }
+      if (q.status) { conditions.push(`j.status = $${idx++}`); values.push(q.status); }
+      if (q.leader_name) { conditions.push(`LOWER(j.leader_name) LIKE $${idx++}`); values.push(`%${q.leader_name.toLowerCase()}%`); }
+      if (q.region) {
+        conditions.push(`j.mosque_id IN (SELECT id FROM mosques WHERE region = $${idx++})`);
+        values.push(q.region);
       }
-      if (query.region) {
-        const mosqueIds = data.mosques.filter(m => m.region === query.region).map(m => m.id);
-        results = results.filter(j => mosqueIds.includes(j.mosque_id));
+
+      if (conditions.length > 0) {
+        sql += ` WHERE ${conditions.join(' AND ')}`;
       }
-      return results.map(j => {
-        const mosque = data.mosques.find(m => m.id === j.mosque_id);
-        const creator = data.users.find(u => u.id === j.created_by);
-        return {
-          ...j,
-          mosque_name: mosque?.name,
-          city: mosque?.city,
-          region: mosque?.region,
-          mosque_address: mosque?.address,
-          mosque_phone: mosque?.phone,
-          created_by_name: creator?.full_name,
-        };
-      }).sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+      sql += ' ORDER BY j.start_date DESC';
+
+      const res = await query(sql, values);
+      return res.rows;
     },
-    create(jamaat) {
-      jamaat.id = nextId('jamaats');
-      jamaat.created_at = new Date().toISOString();
-      jamaat.attached_at = new Date().toISOString();
-      data.jamaats.push(jamaat);
-      save();
-      return jamaat;
+    async create(jamaat) {
+      const res = await query(
+        `INSERT INTO jamaats (mosque_id, leader_name, leader_phone, member_count, duration_type, start_date, end_date, notes, status, created_by, attached_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) RETURNING *`,
+        [jamaat.mosque_id, jamaat.leader_name, jamaat.leader_phone, jamaat.member_count, jamaat.duration_type, jamaat.start_date, jamaat.end_date, jamaat.notes || null, jamaat.status || 'active', jamaat.created_by]
+      );
+      return res.rows[0];
     },
-    update(id, fields) {
-      const j = data.jamaats.find(j => j.id === parseInt(id));
-      if (j) { Object.assign(j, fields); save(); }
-      return j;
+    async update(id, fields) {
+      const keys = Object.keys(fields);
+      if (keys.length === 0) return null;
+      const setClauses = keys.map((k, i) => `${k} = $${i + 2}`);
+      const values = [parseInt(id), ...keys.map(k => fields[k])];
+      const res = await query(`UPDATE jamaats SET ${setClauses.join(', ')} WHERE id = $1 RETURNING *`, values);
+      return res.rows[0] || null;
     },
-    delete(id) {
-      data.jamaats = data.jamaats.filter(j => j.id !== parseInt(id));
-      data.jamaat_members = data.jamaat_members.filter(m => m.jamaat_id !== parseInt(id));
-      save();
+    async delete(id) {
+      await query('DELETE FROM jamaats WHERE id = $1', [parseInt(id)]);
     },
-    stats() {
-      const active = data.jamaats.filter(j => j.status === 'active');
-      const completed = data.jamaats.filter(j => j.status === 'completed');
+    async stats() {
+      const allJamaats = (await query('SELECT * FROM jamaats')).rows;
+      const allMosques = (await query('SELECT * FROM mosques')).rows;
+
+      const active = allJamaats.filter(j => j.status === 'active');
+      const completed = allJamaats.filter(j => j.status === 'completed');
       const totalMembers = active.reduce((sum, j) => sum + (j.member_count || 0), 0);
       const totalMembersCompleted = completed.reduce((sum, j) => sum + (j.member_count || 0), 0);
 
-      const monthlyActive = {};
-      active.forEach(j => {
-        const month = j.start_date?.slice(0, 7);
-        if (month) {
-          if (!monthlyActive[month]) monthlyActive[month] = { count: 0, members: 0 };
-          monthlyActive[month].count++;
-          monthlyActive[month].members += j.member_count || 0;
-        }
-      });
-
       const monthlyAll = {};
-      data.jamaats.forEach(j => {
+      allJamaats.forEach(j => {
         const month = j.start_date?.slice(0, 7);
         if (month) {
           if (!monthlyAll[month]) monthlyAll[month] = { count: 0, members: 0 };
@@ -163,26 +246,26 @@ const db = {
         }
       });
 
-      const topMosques = data.mosques.map(m => ({
+      const topMosques = allMosques.map(m => ({
         id: m.id, name: m.name, city: m.city,
         active_jamaats: active.filter(j => j.mosque_id === m.id).length,
-        total_jamaats: data.jamaats.filter(j => j.mosque_id === m.id).length,
-        total_members: data.jamaats.filter(j => j.mosque_id === m.id).reduce((s, j) => s + (j.member_count || 0), 0),
+        total_jamaats: allJamaats.filter(j => j.mosque_id === m.id).length,
+        total_members: allJamaats.filter(j => j.mosque_id === m.id).reduce((s, j) => s + (j.member_count || 0), 0),
       })).sort((a, b) => b.total_jamaats - a.total_jamaats).slice(0, 10);
 
       const leaders = {};
-      data.jamaats.forEach(j => {
+      allJamaats.forEach(j => {
         if (!leaders[j.leader_name]) leaders[j.leader_name] = { count: 0, members: 0 };
         leaders[j.leader_name].count++;
         leaders[j.leader_name].members += j.member_count || 0;
       });
 
       return {
-        total_mosques: data.mosques.length,
-        mosques_can_host: data.mosques.filter(m => m.can_host_jamaat).length,
+        total_mosques: allMosques.length,
+        mosques_can_host: allMosques.filter(m => m.can_host_jamaat).length,
         active_jamaats: active.length,
         completed_jamaats: completed.length,
-        total_jamaats: data.jamaats.length,
+        total_jamaats: allJamaats.length,
         total_members: totalMembers,
         total_members_completed: totalMembersCompleted,
         avg_members_per_jamaat: active.length > 0 ? Math.round(totalMembers / active.length) : 0,
@@ -192,7 +275,7 @@ const db = {
           { duration_type: '4_months', count: active.filter(j => j.duration_type === '4_months').length, members: active.filter(j => j.duration_type === '4_months').reduce((s, j) => s + j.member_count, 0) },
         ],
         by_region: Object.entries(active.reduce((acc, j) => {
-          const mosque = data.mosques.find(m => m.id === j.mosque_id);
+          const mosque = allMosques.find(m => m.id === j.mosque_id);
           const region = mosque?.region || 'Неизвестно';
           acc[region] = (acc[region] || 0) + 1;
           return acc;
@@ -201,32 +284,25 @@ const db = {
         top_mosques: topMosques,
         top_leaders: Object.entries(leaders).sort((a, b) => b[1].count - a[1].count).slice(0, 10).map(([name, v]) => ({ name, ...v })),
       };
-    }
+    },
   },
 
   jamaat_members: {
-    byJamaat(jamaatId) {
-      return data.jamaat_members.filter(m => m.jamaat_id === parseInt(jamaatId));
+    async byJamaat(jamaatId) {
+      const res = await query('SELECT * FROM jamaat_members WHERE jamaat_id = $1 ORDER BY id', [parseInt(jamaatId)]);
+      return res.rows;
     },
-    create(member) {
-      member.id = nextId('jamaat_members');
-      data.jamaat_members.push(member);
-      save();
-      return member;
+    async create(member) {
+      const res = await query(
+        'INSERT INTO jamaat_members (jamaat_id, name, phone) VALUES ($1, $2, $3) RETURNING *',
+        [member.jamaat_id, member.name, member.phone || null]
+      );
+      return res.rows[0];
     },
-    delete(id) {
-      data.jamaat_members = data.jamaat_members.filter(m => m.id !== parseInt(id));
-      save();
-    }
-  }
+    async delete(id) {
+      await query('DELETE FROM jamaat_members WHERE id = $1', [parseInt(id)]);
+    },
+  },
 };
-
-// Init
-load();
-
-const defaultAdminPassword = bcrypt.hashSync('admin123', 10);
-if (!db.users.getByPhone('996700000000')) {
-  db.users.create({ phone: '996700000000', password: defaultAdminPassword, full_name: 'Главный Админ', role: 'superadmin' });
-}
 
 module.exports = db;

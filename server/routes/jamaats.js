@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { authenticate, requireAdmin, requireSuperAdmin } = require('../middleware/auth');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -17,21 +17,21 @@ function calculateEndDate(startDate, durationType) {
   return start.toISOString().split('T')[0];
 }
 
-function isMosqueAdmin(userId, mosqueId) {
-  const mosque = db.mosques.get(mosqueId);
+async function isMosqueAdmin(userId, mosqueId) {
+  const mosque = await db.mosques.get(mosqueId);
   return mosque && mosque.admin_id === userId;
 }
 
-function canManageJamaat(user, jamaat) {
+async function canManageJamaat(user, jamaat) {
   if (user.role === 'superadmin') return true;
-  if (user.role === 'admin' && isMosqueAdmin(user.id, jamaat.mosque_id)) return true;
+  if (user.role === 'admin' && await isMosqueAdmin(user.id, jamaat.mosque_id)) return true;
   return false;
 }
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { mosque_id, status, region, leader_name } = req.query;
-    const jamaats = db.jamaats.all({ mosque_id, status, region, leader_name });
+    const jamaats = await db.jamaats.all({ mosque_id, status, region, leader_name });
     const result = jamaats.map(j => ({
       ...j,
       duration_label: j.duration_type === '3_days' ? '3 дня' :
@@ -43,21 +43,21 @@ router.get('/', (req, res) => {
   }
 });
 
-router.get('/stats/overview', (req, res) => {
+router.get('/stats/overview', async (req, res) => {
   try {
-    res.json(db.jamaats.stats());
+    res.json(await db.jamaats.stats());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const jamaat = db.jamaats.get(req.params.id);
+    const jamaat = await db.jamaats.get(req.params.id);
     if (!jamaat) return res.status(404).json({ error: 'Джамаат не найден' });
 
-    const mosque = db.mosques.get(jamaat.mosque_id);
-    const members = db.jamaat_members.byJamaat(req.params.id);
+    const mosque = await db.mosques.get(jamaat.mosque_id);
+    const members = await db.jamaat_members.byJamaat(req.params.id);
 
     res.json({ ...jamaat, mosque_name: mosque?.name, city: mosque?.city, region: mosque?.region, mosque_address: mosque?.address, members });
   } catch (err) {
@@ -65,7 +65,7 @@ router.get('/:id', (req, res) => {
   }
 });
 
-router.post('/', authenticate, requireAdmin, (req, res) => {
+router.post('/', authenticate, requireAdmin, async (req, res) => {
   try {
     const { mosque_id, leader_name, leader_phone, member_count, duration_type, start_date, notes, members } = req.body;
 
@@ -73,16 +73,16 @@ router.post('/', authenticate, requireAdmin, (req, res) => {
       return res.status(400).json({ error: 'Заполните все обязательные поля' });
     }
 
-    const mosque = db.mosques.get(mosque_id);
+    const mosque = await db.mosques.get(mosque_id);
     if (!mosque) return res.status(404).json({ error: 'Мечеть не найдена' });
 
-    if (req.user.role !== 'superadmin' && !isMosqueAdmin(req.user.id, mosque_id)) {
+    if (req.user.role !== 'superadmin' && !await isMosqueAdmin(req.user.id, mosque_id)) {
       return res.status(403).json({ error: 'Вы не ответственный за эту мечеть' });
     }
 
     const end_date = calculateEndDate(start_date, duration_type);
 
-    const jamaat = db.jamaats.create({
+    const jamaat = await db.jamaats.create({
       mosque_id: parseInt(mosque_id),
       leader_name,
       leader_phone,
@@ -97,7 +97,7 @@ router.post('/', authenticate, requireAdmin, (req, res) => {
 
     if (members && members.length > 0) {
       for (const member of members) {
-        db.jamaat_members.create({ jamaat_id: jamaat.id, name: member.name, phone: member.phone || null });
+        await db.jamaat_members.create({ jamaat_id: jamaat.id, name: member.name, phone: member.phone || null });
       }
     }
 
@@ -107,12 +107,12 @@ router.post('/', authenticate, requireAdmin, (req, res) => {
   }
 });
 
-router.put('/:id', authenticate, requireAdmin, (req, res) => {
+router.put('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const jamaat = db.jamaats.get(req.params.id);
+    const jamaat = await db.jamaats.get(req.params.id);
     if (!jamaat) return res.status(404).json({ error: 'Джамаат не найден' });
 
-    if (!canManageJamaat(req.user, jamaat)) {
+    if (!await canManageJamaat(req.user, jamaat)) {
       return res.status(403).json({ error: 'Нет прав для управления этим джамаатом' });
     }
 
@@ -126,61 +126,61 @@ router.put('/:id', authenticate, requireAdmin, (req, res) => {
     if (req.body.member_count) fields.member_count = parseInt(req.body.member_count);
     if (req.body.notes !== undefined) fields.notes = req.body.notes;
 
-    db.jamaats.update(req.params.id, fields);
+    await db.jamaats.update(req.params.id, fields);
     res.json({ message: 'Джамаат обновлён' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.delete('/:id', authenticate, requireAdmin, (req, res) => {
+router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const jamaat = db.jamaats.get(req.params.id);
+    const jamaat = await db.jamaats.get(req.params.id);
     if (!jamaat) return res.status(404).json({ error: 'Джамаат не найден' });
 
-    if (!canManageJamaat(req.user, jamaat)) {
+    if (!await canManageJamaat(req.user, jamaat)) {
       return res.status(403).json({ error: 'Нет прав для удаления этого джамаата' });
     }
 
-    db.jamaats.delete(req.params.id);
+    await db.jamaats.delete(req.params.id);
     res.json({ message: 'Джамаат удалён' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/:id/members', authenticate, requireAdmin, (req, res) => {
+router.post('/:id/members', authenticate, requireAdmin, async (req, res) => {
   try {
-    const jamaat = db.jamaats.get(req.params.id);
+    const jamaat = await db.jamaats.get(req.params.id);
     if (!jamaat) return res.status(404).json({ error: 'Джамаат не найден' });
 
-    if (!canManageJamaat(req.user, jamaat)) {
+    if (!await canManageJamaat(req.user, jamaat)) {
       return res.status(403).json({ error: 'Нет прав' });
     }
 
     const { name, phone } = req.body;
     if (!name) return res.status(400).json({ error: 'Укажите имя участника' });
 
-    const member = db.jamaat_members.create({ jamaat_id: parseInt(req.params.id), name, phone: phone || null });
-    db.jamaats.update(req.params.id, { member_count: (jamaat.member_count || 0) + 1 });
+    const member = await db.jamaat_members.create({ jamaat_id: parseInt(req.params.id), name, phone: phone || null });
+    await db.jamaats.update(req.params.id, { member_count: (jamaat.member_count || 0) + 1 });
     res.json(member);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.delete('/:id/members/:memberId', authenticate, requireAdmin, (req, res) => {
+router.delete('/:id/members/:memberId', authenticate, requireAdmin, async (req, res) => {
   try {
-    const jamaat = db.jamaats.get(req.params.id);
+    const jamaat = await db.jamaats.get(req.params.id);
     if (!jamaat) return res.status(404).json({ error: 'Джамаат не найден' });
 
-    if (!canManageJamaat(req.user, jamaat)) {
+    if (!await canManageJamaat(req.user, jamaat)) {
       return res.status(403).json({ error: 'Нет прав' });
     }
 
-    db.jamaat_members.delete(req.params.memberId);
+    await db.jamaat_members.delete(req.params.memberId);
     if (jamaat.member_count > 0) {
-      db.jamaats.update(req.params.id, { member_count: jamaat.member_count - 1 });
+      await db.jamaats.update(req.params.id, { member_count: jamaat.member_count - 1 });
     }
     res.json({ message: 'Участник удалён' });
   } catch (err) {

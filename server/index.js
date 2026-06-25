@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const db = require('./db');
 
 const authRoutes = require('./routes/auth');
 const mosqueRoutes = require('./routes/mosques');
@@ -23,6 +24,11 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Сервер запущен на порту ${PORT}`);
+db.initDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Сервер запущен на порту ${PORT}`);
+  });
+}).catch(err => {
+  console.error('Ошибка подключения к БД:', err.message);
+  process.exit(1);
 });
