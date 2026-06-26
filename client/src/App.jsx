@@ -50,7 +50,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/jamaat-tracker">
       <AuthProvider>
         <AppRoutes />
       </AuthProvider>
