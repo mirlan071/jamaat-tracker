@@ -157,7 +157,6 @@ const db = {
       if (query_params.search) {
         conditions.push(`(LOWER(m.name) LIKE $${idx} OR LOWER(m.city) LIKE $${idx})`);
         values.push(`%${query_params.search.toLowerCase()}%`);
-        idx++;
       }
 
       if (conditions.length > 0) {
@@ -196,7 +195,7 @@ const db = {
       if (q.status) { conditions.push(`j.status = $${idx++}`); values.push(q.status); }
       if (q.leader_name) { conditions.push(`LOWER(j.leader_name) LIKE $${idx++}`); values.push(`%${q.leader_name.toLowerCase()}%`); }
       if (q.region) {
-        conditions.push(`j.mosque_id IN (SELECT id FROM mosques WHERE region = $${idx++})`);
+        conditions.push(`j.mosque_id IN (SELECT id FROM mosques WHERE region = $${idx})`);
         values.push(q.region);
       }
 
