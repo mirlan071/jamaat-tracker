@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { jamaats as jamaatsApi } from '../api';
 import { useAuth } from '../AuthContext';
+import { formatDate } from '../utils';
 
 export default function HomePage() {
   const [stats, setStats] = useState(null);
@@ -83,7 +84,7 @@ export default function HomePage() {
                 <div className="card-info">
                   <span>👤 {j.leader_name}</span>
                   <span>📞 {j.leader_phone}</span>
-                  <span>📅 {j.start_date}</span>
+                  <span>📅 {formatDate(j.start_date)}</span>
                 </div>
               </div>
             </Link>

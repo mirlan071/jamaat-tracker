@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { mosques as mosquesApi, jamaats as jamaatsApi } from '../api';
 import { useAuth } from '../AuthContext';
+import { formatDateRange, formatDate } from '../utils';
 
 export default function MosqueDetailPage() {
   const { id } = useParams();
@@ -105,8 +106,8 @@ export default function MosqueDetailPage() {
                 </div>
               </div>
               <div className="card-info">
-                <span>📅 {j.start_date} — {j.end_date}</span>
-                {j.attached_at && <span>🔗 С {new Date(j.attached_at).toLocaleDateString('ru-RU')}</span>}
+                <span>📅 {formatDateRange(j.start_date, j.end_date)}</span>
+                {j.attached_at && <span>🔗 С {formatDate(j.attached_at)}</span>}
               </div>
               {j.notes && <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#666' }}>📝 {j.notes}</div>}
               {isAdmin && (
@@ -141,8 +142,8 @@ export default function MosqueDetailPage() {
                   <span className="badge badge-completed">Завершён</span>
                 </div>
                 <div className="card-info">
-                  <span>📅 {j.start_date} — {j.end_date}</span>
-                  {j.detached_at && <span>🚪 Ушёл: {new Date(j.detached_at).toLocaleDateString('ru-RU')}</span>}
+                  <span>📅 {formatDateRange(j.start_date, j.end_date)}</span>
+                  {j.detached_at && <span>🚪 Ушёл: {formatDate(j.detached_at)}</span>}
                 </div>
               </div>
             ))}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { jamaats as jamaatsApi } from '../api';
 import { useAuth } from '../AuthContext';
+import { formatDateRange } from '../utils';
 
 export default function JamaatDetailPage() {
   const { id } = useParams();
@@ -60,7 +61,7 @@ export default function JamaatDetailPage() {
             <span>👤 {jamaat.leader_name}</span>
             <span>📞 {jamaat.leader_phone}</span>
             <span>👥 {jamaat.member_count} участников</span>
-            <span>📅 {jamaat.start_date} — {jamaat.end_date}</span>
+            <span>📅 {formatDateRange(jamaat.start_date, jamaat.end_date)}</span>
             <span>🏛️ {jamaat.mosque_name}, {jamaat.city}</span>
             <span className={`badge badge-${jamaat.duration_type}`} style={{ width: 'fit-content' }}>
               {jamaat.duration_type === '3_days' ? '3 дня' : jamaat.duration_type === '40_days' ? '40 дней' : '4 месяца'}

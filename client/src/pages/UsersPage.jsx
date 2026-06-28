@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { users as usersApi } from '../api';
 import { useAuth } from '../AuthContext';
+import { formatDate } from '../utils';
 
 const ROLES = { user: 'Пользователь', admin: 'Админ', superadmin: 'Главный админ' };
 
@@ -99,7 +100,7 @@ export default function UsersPage() {
                 </span>
               </div>
               <div className="card-info">
-                <span>📅 {u.created_at?.split('T')[0]}</span>
+                <span>📅 {formatDate(u.created_at)}</span>
               </div>
               {u.id !== user?.id && (
                 <div style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

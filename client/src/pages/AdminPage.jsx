@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { mosques as mosquesApi, jamaats as jamaatsApi, users as usersApi } from '../api';
 import { useAuth } from '../AuthContext';
+import { formatDateRange, formatDate } from '../utils';
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('mosques');
@@ -166,8 +167,8 @@ export default function AdminPage() {
                   </div>
                   <div className="card-info">
                     <span>📞 {j.leader_phone}</span>
-                    <span>📅 {j.start_date} — {j.end_date}</span>
-                    {j.attached_at && <span>🔗 Прикреплён: {new Date(j.attached_at).toLocaleDateString('ru-RU')}</span>}
+                    <span>📅 {formatDateRange(j.start_date, j.end_date)}</span>
+                    {j.attached_at && <span>🔗 Прикреплён: {formatDate(j.attached_at)}</span>}
                     {j.detached_at && <span>🚪 Откреплён: {new Date(j.detached_at).toLocaleDateString('ru-RU')}</span>}
                   </div>
                   <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>

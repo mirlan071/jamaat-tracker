@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { jamaats as jamaatsApi, mosques as mosquesApi } from '../api';
 import { useAuth } from '../AuthContext';
+import { formatDateRange } from '../utils';
 
 export default function JamaatsPage() {
   const [jamaatsList, setJamaatsList] = useState([]);
@@ -114,7 +115,7 @@ export default function JamaatsPage() {
                 <div className="card-info">
                   <span>👤 {j.leader_name}</span>
                   <span>📞 {j.leader_phone}</span>
-                  <span>📅 {j.start_date} — {j.end_date}</span>
+                  <span>📅 {formatDateRange(j.start_date, j.end_date)}</span>
                 </div>
               </div>
             </Link>
