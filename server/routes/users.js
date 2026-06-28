@@ -52,7 +52,7 @@ router.post('/', authenticate, requireSuperAdmin, async (req, res) => {
     if (!phone || !password || !full_name) {
       return res.status(400).json({ error: 'Заполните все обязательные поля' });
     }
-    if (!/^\+?\d{10,15}$/.test(phone.replace(/\s/g, ''))) {
+    if (!/^(0\d{9,14}|\+?\d{10,15})$/.test(phone.replace(/\s/g, ''))) {
       return res.status(400).json({ error: 'Неверный формат телефона' });
     }
     if (password.length < 6) {

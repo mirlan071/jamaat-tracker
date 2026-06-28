@@ -21,7 +21,7 @@ describe('LoginPage', () => {
       </MemoryRouter>
     );
     expect(screen.getByText('Жамаат Трекер')).toBeDefined();
-    expect(screen.getByPlaceholderText('+996 XXX XX XX XX')).toBeDefined();
+    expect(screen.getByPlaceholderText('0 XXX XX XX XX')).toBeDefined();
     expect(screen.getByText('Войти')).toBeDefined();
   });
 });

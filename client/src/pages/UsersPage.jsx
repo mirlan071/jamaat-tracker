@@ -144,7 +144,7 @@ export default function UsersPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Телефон *</label>
-                <input type="tel" className="form-input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} required placeholder="+996..." />
+                <input type="tel" className="form-input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} required placeholder="0 XXX XX XX XX" />
               </div>
               <div className="form-group">
                 <label className="form-label">Пароль * (мин. 6 символов)</label>

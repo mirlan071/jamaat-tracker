@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 
 export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
-  const [phone, setPhone] = useState('+996');
+  const [phone, setPhone] = useState('0');
   const [password, setPassword] = useState('');
   const [full_name, setFullName] = useState('');
   const [error, setError] = useState('');

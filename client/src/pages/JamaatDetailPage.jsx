@@ -126,7 +126,7 @@ export default function JamaatDetailPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Телефон</label>
-                <input type="tel" className="form-input" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="+996..." />
+                <input type="tel" className="form-input" value={memberForm.phone} onChange={e => setMemberForm({...memberForm, phone: e.target.value})} placeholder="0 XXX XX XX XX" />
               </div>
               <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', justifyContent: 'center' }}>
                 Добавить участника
