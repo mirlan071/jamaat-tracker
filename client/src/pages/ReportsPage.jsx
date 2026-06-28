@@ -1,22 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { jamaats as jamaatsApi } from '../api';
-
-function BarChart({ data, labelKey, valueKey, color = 'var(--primary)' }) {
-  const max = Math.max(...data.map(d => d[valueKey]), 1);
-  return (
-    <div className="chart-bars">
-      {data.map((d, i) => (
-        <div key={i} className="chart-bar-row">
-          <div className="chart-bar-label">{d[labelKey]}</div>
-          <div className="chart-bar-track">
-            <div className="chart-bar-fill" style={{ width: `${(d[valueKey] / max) * 100}%`, background: color }} />
-          </div>
-          <div className="chart-bar-value">{d[valueKey]}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function HorizontalBar({ data, max }) {
   const m = max || Math.max(...data.map(d => d.value), 1);
@@ -40,28 +23,32 @@ const DURATION_LABELS = { '3_days': '3 дня', '40_days': '40 дней', '4_mon
 export default function ReportsPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState('overview');
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    jamaatsApi.stats().then(setStats).finally(() => setLoading(false));
+    jamaatsApi.stats()
+      .then(setStats)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="loading"><div className="spinner"></div></div>;
-  if (!stats) return <div className="empty-state"><p>Ошибка загрузки</p></div>;
+  if (error) return <div className="empty-state"><p>Ошибка: {error}</p></div>;
+  if (!stats) return <div className="empty-state"><p>Нет данных</p></div>;
 
-  const durationData = stats.by_duration.map(d => ({
+  const durationData = (stats.by_duration || []).map(d => ({
     label: DURATION_LABELS[d.duration_type],
-    count: d.count,
-    members: d.members,
+    count: d.count || 0,
+    members: d.members || 0,
   }));
 
-  const regionData = stats.by_region.map(d => ({ label: d.region, value: d.count }));
+  const regionData = (stats.by_region || []).map(d => ({ label: d.region, value: d.count || 0 }));
   const maxRegion = Math.max(...regionData.map(d => d.value), 1);
 
-  const monthlyData = stats.monthly.slice(-6).map(d => ({
+  const monthlyData = (stats.monthly || []).slice(-6).map(d => ({
     label: d.month,
-    count: d.count,
-    members: d.members,
+    count: d.count || 0,
+    members: d.members || 0,
   }));
   const maxMonthly = Math.max(...monthlyData.map(d => d.count), 1);
 
@@ -161,11 +148,11 @@ export default function ReportsPage() {
         )}
 
         <div className="section-title">Топ мечетей</div>
-        {stats.top_mosques.length > 0 ? (
+        {(stats.top_mosques || []).length > 0 ? (
           <div className="report-chart-card">
             <HorizontalBar
-              data={stats.top_mosques.map(m => ({ label: `${m.name} (${m.city})`, value: m.total_jamaats }))}
-              max={Math.max(...stats.top_mosques.map(m => m.total_jamaats), 1)}
+              data={(stats.top_mosques || []).map(m => ({ label: `${m.name} (${m.city})`, value: m.total_jamaats }))}
+              max={Math.max(...(stats.top_mosques || []).map(m => m.total_jamaats), 1)}
             />
           </div>
         ) : (
@@ -173,9 +160,9 @@ export default function ReportsPage() {
         )}
 
         <div className="section-title">Топ руководителей</div>
-        {stats.top_leaders.length > 0 ? (
+        {(stats.top_leaders || []).length > 0 ? (
           <div className="report-chart-card">
-            {stats.top_leaders.map((l, i) => (
+            {(stats.top_leaders || []).map((l, i) => (
               <div key={i} className="leader-row">
                 <div className="leader-rank">#{i + 1}</div>
                 <div className="leader-info">

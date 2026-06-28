@@ -178,6 +178,9 @@ router.delete('/:id/members/:memberId', authenticate, requireAdmin, async (req, 
       return res.status(403).json({ error: 'Нет прав' });
     }
 
+    const member = await db.query('SELECT * FROM jamaat_members WHERE id = $1', [parseInt(req.params.memberId)]);
+    if (!member.rows[0]) return res.status(404).json({ error: 'Участник не найден' });
+
     await db.jamaat_members.delete(req.params.memberId);
     if (jamaat.member_count > 0) {
       await db.jamaats.update(req.params.id, { member_count: jamaat.member_count - 1 });
